@@ -2,23 +2,14 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Dos Entidades con Historias y Popups</title>
+  <title>Dos Entidades con Historias Dinámicas</title>
   <style>
     body { display: flex; font-family: sans-serif; margin: 0; }
-    #canvasContainer { flex: 2; position: relative; }
+    #canvasContainer { flex: 2; }
     #infoPanel { flex: 1; border-left: 2px solid #ccc; padding: 10px; background: #f7f7f7; overflow-y: auto; }
     #log { height: 50vh; overflow-y: auto; border: 1px solid #ddd; padding: 5px; background: #fff; }
     ul { padding-left: 20px; }
     button { margin-top: 10px; padding: 5px 10px; }
-    .popup {
-      position: absolute;
-      background: rgba(255,255,0,0.8);
-      padding: 4px 8px;
-      border-radius: 4px;
-      pointer-events: none;
-      font-size: 12px;
-      white-space: nowrap;
-    }
   </style>
 </head>
 <body>
@@ -39,11 +30,16 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <script>
-    let A, B, imgA, imgB, zonas=[], zonaImgs=[];
-    let tiempo=0, logDiv;
-    const cooldownTime=60000;
-    let ultimaInteraccionIA=0;
-    const canvasContainer = document.getElementById("canvasContainer");
+    let A, B;
+    let imgA, imgB;
+    let zonas = [];
+    let zonaImgs = [];
+    let tiempo = 0;
+    let logDiv;
+    const cooldownTime = 60000; // 60 segundos
+
+    // 👉 Cambia esta URL por la de tu backend en Render
+    const BACKEND_URL = "https://entidades-historia.onrender.com";
 
     function preload() {
       imgA = loadImage("https://i.ibb.co/YBZmzKCJ/azul.png");
@@ -62,89 +58,108 @@
       B = {x:500, y:200, r:40, memoria:[], tx:random(1000), ty:random(1000), cooldown:-cooldownTime, casa:{x:550,y:350}, enCasa:true};
 
       zonas = [
-        {x:150,y:100,r:30,info:["Los hermanos discutieron por las lindes de la granja.","Uno acusó al otro de robar manzanas del huerto.","Al final pidieron consejo al abuelo para reconciliarse."], img: zonaImgs[0]},
-        {x:300,y:200,r:30,info:["La hija del panadero organizó un concurso de pasteles.","Se rumorea que ganó haciendo trampas con un horno secreto.","Los vecinos la felicitaron y sospecharon del truco del horno."], img: zonaImgs[1]},
-        {x:450,y:300,r:30,info:["El nuevo cura llegó y nadie sabía su nombre.","La señora más devota empezó a ayudarlo con la misa diaria.","Pronto todos comentaron su comportamiento extraño."], img: zonaImgs[2]}
+        { x:150, y:100, r:30, tema:"Disputa entre hermanos por las lindes de la granja", img: zonaImgs[0] },
+        { x:300, y:200, r:30, tema:"La hija del panadero y el concurso de pasteles", img: zonaImgs[1] },
+        { x:450, y:300, r:30, tema:"El nuevo cura misterioso del pueblo", img: zonaImgs[2] }
       ];
-
-      let saved = localStorage.getItem("estadoEntesZonasFragmentadas");
-      if (saved) {
-        let data = JSON.parse(saved);
-        A = data.A; B = data.B; tiempo = data.tiempo;
-        data.log.forEach(msg => addLog(msg));
-        actualizarMemorias();
-      }
 
       setInterval(() => {
         tiempo++;
         document.getElementById("time").innerText = tiempo;
-        guardarEstado();
-      },1000);
+      }, 1000);
     }
 
     function draw() {
       background(230);
-      for(let z of zonas) image(z.img, z.x-z.r, z.y-z.r, z.r*2, z.r*2);
-      mover(A); mover(B);
-      image(imgA,A.x-A.r,A.y-A.r,A.r*2,A.r*2);
-      image(imgB,B.x-B.r,B.y-B.r,B.r*2,B.r*2);
+
+      for (let z of zonas) {
+        image(z.img, z.x - z.r, z.y - z.r, z.r*2, z.r*2);
+      }
+
+      mover(A);
+      mover(B);
+
+      image(imgA, A.x - A.r, A.y - A.r, A.r*2, A.r*2);
+      image(imgB, B.x - B.r, B.y - B.r, B.r*2, B.r*2);
 
       recogerFragmentos(A);
       recogerFragmentos(B);
 
-      if(dist(A.x,A.y,B.x,B.y)<A.r+B.r+20) comunicar(A,B);
-
-      if(millis()-ultimaInteraccionIA>2000 && (A.memoria.length>0||B.memoria.length>0)){
-        ultimaInteraccionIA = millis();
-        comunicarConIA(A,B);
+      if (dist(A.x,A.y,B.x,B.y) < A.r + B.r + 20) {
+        comunicar(A,B);
       }
     }
 
-    function mover(ent){
+    function mover(ent) {
       if(!ent.enCasa){
-        let dir = createVector(ent.casa.x-ent.x,ent.casa.y-ent.y);
-        if(dir.mag()>1){ dir.setMag(2); ent.x+=dir.x; ent.y+=dir.y; }
-        else ent.enCasa=true;
+        let dir = createVector(ent.casa.x - ent.x, ent.casa.y - ent.y);
+        if(dir.mag() > 1){
+          dir.setMag(2);
+          ent.x += dir.x;
+          ent.y += dir.y;
+        } else {
+          ent.enCasa = true;
+        }
       } else {
-        let dx=map(noise(ent.tx),0,1,-2,2);
-        let dy=map(noise(ent.ty),0,1,-2,2);
-        ent.x+=dx; ent.y+=dy; ent.tx+=0.01; ent.ty+=0.01;
-        ent.x=constrain(ent.x,ent.r,width-ent.r); ent.y=constrain(ent.y,ent.r,height-ent.r);
+        let dx = map(noise(ent.tx),0,1,-2,2);
+        let dy = map(noise(ent.ty),0,1,-2,2);
+        ent.x += dx;
+        ent.y += dy;
+        ent.tx += 0.01;
+        ent.ty += 0.01;
+        ent.x = constrain(ent.x, ent.r, width - ent.r);
+        ent.y = constrain(ent.y, ent.r, height - ent.r);
       }
     }
 
-    function recogerFragmentos(ent){
-      for(let z of zonas){
-        for(let frag of z.info){
-          if(canCollect(ent,frag,z)){
-            ent.memoria.push(frag);
+    async function recogerFragmentos(ent){
+      for (let z of zonas){
+        if(canCollect(ent, z)){
+          try {
+            let prompt = `Inventa un fragmento breve de historia relacionado con el tema "${z.tema}". Escríbelo como si fuera un rumor o recuerdo del pueblo.`;
+            let fragmento = await generarHistoria(prompt);
+            ent.memoria.push(fragmento);
             ent.cooldown = millis();
             ent.enCasa = false;
-            addLog((ent===A?"Prudencio":"Juana")+" recogió: "+frag);
-            showPopup(ent, frag);
+            addLog((ent===A?"Prudencio":"Juana")+" descubrió: "+fragmento);
             actualizarMemorias();
+          } catch(e){
+            addLog("Error al generar fragmento: " + e.message);
           }
         }
       }
     }
 
-    function canCollect(ent,frag,z){
-      return ent.enCasa && !ent.memoria.includes(frag) && (millis()-ent.cooldown>cooldownTime) && dist(ent.x,ent.y,z.x,z.y)<ent.r+z.r;
+    function canCollect(ent, z){
+      return ent.enCasa && (millis() - ent.cooldown > cooldownTime) && dist(ent.x,ent.y,z.x,z.y)<ent.r+z.r;
     }
 
     function comunicar(e1,e2){
-      if(frameCount%60===0){
-        let nuevaInfo = e1.memoria.filter(f=>!e2.memoria.includes(f));
-        if(nuevaInfo.length>0){ e2.memoria=e2.memoria.concat(nuevaInfo); addLog("Prudencio le contó fragmentos a Juana: "+nuevaInfo.join(", ")); actualizarMemorias(); }
-        else { nuevaInfo=e2.memoria.filter(f=>!e1.memoria.includes(f)); if(nuevaInfo.length>0){ e1.memoria=e1.memoria.concat(nuevaInfo); addLog("Juana le contó fragmentos a Prudencio: "+nuevaInfo.join(", ")); actualizarMemorias(); } else addLog("Juana y Prudencio hablan de tontás."); }
+      if(frameCount % 120 === 0){ // cada ~2 seg
+        let nuevaInfo = e1.memoria.filter(f => !e2.memoria.includes(f));
+        if(nuevaInfo.length>0){
+          e2.memoria = e2.memoria.concat(nuevaInfo);
+          addLog("Prudencio le contó a Juana: " + nuevaInfo.join(", "));
+          actualizarMemorias();
+        } else {
+          nuevaInfo = e2.memoria.filter(f => !e1.memoria.includes(f));
+          if(nuevaInfo.length>0){
+            e1.memoria = e1.memoria.concat(nuevaInfo);
+            addLog("Juana le contó a Prudencio: " + nuevaInfo.join(", "));
+            actualizarMemorias();
+          } else {
+            addLog("Juana y Prudencio charlan de banalidades.");
+          }
+        }
       }
     }
 
     function actualizarMemorias(){
-      let memA=document.getElementById("memoriaA"), memB=document.getElementById("memoriaB");
+      let memA = document.getElementById("memoriaA");
+      let memB = document.getElementById("memoriaB");
       memA.innerHTML=""; memB.innerHTML="";
-      A.memoria.forEach(f=>{ let li=document.createElement("li"); li.textContent=f; memA.appendChild(li); });
-      B.memoria.forEach(f=>{ let li=document.createElement("li"); li.textContent=f; memB.appendChild(li); });
+      A.memoria.forEach(f => { let li=document.createElement("li"); li.textContent=f; memA.appendChild(li); });
+      B.memoria.forEach(f => { let li=document.createElement("li"); li.textContent=f; memB.appendChild(li); });
     }
 
     function addLog(msg){
@@ -152,64 +167,24 @@
       p.textContent=msg;
       logDiv.appendChild(p);
       logDiv.scrollTop=logDiv.scrollHeight;
-      guardarEstado();
-    }
-
-    function guardarEstado(){
-      let data={A,B,tiempo,log:[]};
-      logDiv.querySelectorAll("p").forEach(p=>data.log.push(p.textContent));
-      localStorage.setItem("estadoEntesZonasFragmentadas",JSON.stringify(data));
     }
 
     function resetMemoria(){
       A.memoria=[]; B.memoria=[]; logDiv.innerHTML="";
       actualizarMemorias(); tiempo=0; document.getElementById("time").innerText="0";
       A.enCasa=true; B.enCasa=true; A.x=A.casa.x; A.y=A.casa.y; B.x=B.casa.x; B.y=B.casa.y;
-      localStorage.removeItem("estadoEntesZonasFragmentadas");
     }
 
-    function showPopup(ent,text){
-      const popup = document.createElement("div");
-      popup.className="popup";
-      popup.textContent=text;
-      canvasContainer.appendChild(popup);
-      popup.style.left=(ent.x+20)+"px";
-      popup.style.top=(ent.y-20)+"px";
-      setTimeout(()=>popup.remove(),3000);
-    }
-
+    // --- Conexión al backend ---
     async function generarHistoria(prompt){
-      try{
-        const response = await fetch("https://entidades-historia.onrender.com/generarHistoria", {
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({prompt})
-        });
-        const data = await response.json();
-        console.log("Respuesta backend:", data);
-        return data.text || data.choices?.[0]?.message?.content || "Sin contenido";
-      } catch(e){
-        addLog("Error backend: "+e.message);
-        return null;
-      }
+      const response = await fetch(BACKEND_URL, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({prompt})
+      });
+      const data = await response.json();
+      return data.choices[0].message.content;
     }
-
-    async function comunicarConIA(e1,e2){
-      if(!e1.memoria.length && !e2.memoria.length) return;
-      let prompt = `
-Dos entidades interactúan.
-A sabe: ${e1.memoria.join(", ")}
-B sabe: ${e2.memoria.join(", ")}
-Genera:
-1. Historia oficial
-2. Historia con cotilleos y mentiras divertidas
-Devuélvelo como texto narrativo.
-      `;
-      const historia = await generarHistoria(prompt);
-      if(historia) addLog(historia);
-      if(historia) showPopup(e1, "IA generó historia!");
-    }
-
   </script>
 </body>
 </html>
