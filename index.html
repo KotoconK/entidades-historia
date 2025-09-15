@@ -26,6 +26,7 @@
     <ul id="memoriaB"></ul>
 
     <button onclick="resetMemoria()">Resetear Memoria y Log</button>
+    <button onclick="togglePause()" id="pauseBtn">⏸️ Pausar</button>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
@@ -36,9 +37,10 @@
     let zonaImgs = [];
     let tiempo = 0;
     let logDiv;
+    let paused = false; // estado de pausa
 
     const cooldownZona = 30000; // 30 segundos por zona
-    const cooldownTime = 60000; // cooldown de entidades (si lo quieres mantener también)
+    const cooldownTime = 60000; // cooldown de entidades
 
     const BACKEND_URL = "https://entidades-historia.onrender.com";
 
@@ -65,8 +67,10 @@
       ];
 
       setInterval(() => {
-        tiempo++;
-        document.getElementById("time").innerText = tiempo;
+        if (!paused) {
+          tiempo++;
+          document.getElementById("time").innerText = tiempo;
+        }
       }, 1000);
     }
 
@@ -75,6 +79,13 @@
 
       for (let z of zonas) {
         image(z.img, z.x - z.r, z.y - z.r, z.r*2, z.r*2);
+      }
+
+      // si está en pausa, mostramos la escena estática
+      if (paused) {
+        image(imgA, A.x - A.r, A.y - A.r, A.r*2, A.r*2);
+        image(imgB, B.x - B.r, B.y - B.r, B.r*2, B.r*2);
+        return;
       }
 
       mover(A);
@@ -114,6 +125,8 @@
     }
 
     async function recogerFragmentos(ent){
+      if (paused) return; // no recolecta si está pausado
+
       for (let z of zonas){
         if (dist(ent.x,ent.y,z.x,z.y) < ent.r + z.r) {
           if (millis() - z.cooldown > cooldownZona) {
@@ -138,6 +151,8 @@
     }
 
     function comunicar(e1,e2){
+      if (paused) return; // no comunican si está pausado
+
       if(frameCount % 120 === 0){
         let nuevaInfo = e1.memoria.filter(f => !e2.memoria.includes(f));
         if(nuevaInfo.length>0){
@@ -176,6 +191,13 @@
       A.memoria=[]; B.memoria=[]; logDiv.innerHTML="";
       actualizarMemorias(); tiempo=0; document.getElementById("time").innerText="0";
       A.enCasa=true; B.enCasa=true; A.x=A.casa.x; A.y=A.casa.y; B.x=B.casa.x; B.y=B.casa.y;
+    }
+
+    function togglePause(){
+      paused = !paused;
+      const btn = document.getElementById("pauseBtn");
+      btn.textContent = paused ? "▶️ Reanudar" : "⏸️ Pausar";
+      addLog(paused ? "⏸️ Simulación en pausa" : "▶️ Simulación reanudada");
     }
 
     async function generarHistoria(prompt){
