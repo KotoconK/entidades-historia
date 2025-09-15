@@ -36,9 +36,10 @@
     let zonaImgs = [];
     let tiempo = 0;
     let logDiv;
-    const cooldownTime = 60000; // 60 segundos
 
-    // 👉 Cambia esta URL por la de tu backend en Render
+    const cooldownZona = 30000; // 30 segundos por zona
+    const cooldownTime = 60000; // cooldown de entidades (si lo quieres mantener también)
+
     const BACKEND_URL = "https://entidades-historia.onrender.com";
 
     function preload() {
@@ -58,9 +59,9 @@
       B = {x:500, y:200, r:40, memoria:[], tx:random(1000), ty:random(1000), cooldown:-cooldownTime, casa:{x:550,y:350}, enCasa:true};
 
       zonas = [
-        { x:150, y:100, r:30, tema:"Disputa entre hermanos por las lindes de la granja", img: zonaImgs[0] },
-        { x:300, y:200, r:30, tema:"La hija del panadero y el concurso de pasteles", img: zonaImgs[1] },
-        { x:450, y:300, r:30, tema:"El nuevo cura misterioso del pueblo", img: zonaImgs[2] }
+        { x:150, y:100, r:30, tema:"Disputa entre hermanos por las lindes de la granja", img: zonaImgs[0], cooldown:0 },
+        { x:300, y:200, r:30, tema:"La hija del panadero y el concurso de pasteles", img: zonaImgs[1], cooldown:0 },
+        { x:450, y:300, r:30, tema:"El nuevo cura misterioso del pueblo", img: zonaImgs[2], cooldown:0 }
       ];
 
       setInterval(() => {
@@ -114,28 +115,30 @@
 
     async function recogerFragmentos(ent){
       for (let z of zonas){
-        if(canCollect(ent, z)){
-          try {
-            let prompt = `Inventa un fragmento breve de historia relacionado con el tema "${z.tema}". Escríbelo como si fuera un rumor o recuerdo del pueblo.`;
-            let fragmento = await generarHistoria(prompt);
-            ent.memoria.push(fragmento);
-            ent.cooldown = millis();
-            ent.enCasa = false;
-            addLog((ent===A?"Prudencio":"Juana")+" descubrió: "+fragmento);
-            actualizarMemorias();
-          } catch(e){
-            addLog("Error al generar fragmento: " + e.message);
+        if (dist(ent.x,ent.y,z.x,z.y) < ent.r + z.r) {
+          if (millis() - z.cooldown > cooldownZona) {
+            z.cooldown = millis(); // activa cooldown de esa zona
+            addLog((ent===A?"Prudencio":"Juana")+" se acerca a "+z.tema+"...");
+            addLog("Enterándose del marujeo...");
+
+            try {
+              let prompt = `Inventa un fragmento breve de historia relacionado con el tema "${z.tema}". Escríbelo como si fuera un rumor o recuerdo del pueblo.`;
+              let fragmento = await generarHistoria(prompt);
+              ent.memoria.push(fragmento);
+              ent.cooldown = millis();
+              ent.enCasa = false;
+              addLog((ent===A?"Prudencio":"Juana")+" descubrió: "+fragmento);
+              actualizarMemorias();
+            } catch(e){
+              addLog("Error al generar fragmento: " + e.message);
+            }
           }
         }
       }
     }
 
-    function canCollect(ent, z){
-      return ent.enCasa && (millis() - ent.cooldown > cooldownTime) && dist(ent.x,ent.y,z.x,z.y)<ent.r+z.r;
-    }
-
     function comunicar(e1,e2){
-      if(frameCount % 120 === 0){ // cada ~2 seg
+      if(frameCount % 120 === 0){
         let nuevaInfo = e1.memoria.filter(f => !e2.memoria.includes(f));
         if(nuevaInfo.length>0){
           e2.memoria = e2.memoria.concat(nuevaInfo);
@@ -175,7 +178,6 @@
       A.enCasa=true; B.enCasa=true; A.x=A.casa.x; A.y=A.casa.y; B.x=B.casa.x; B.y=B.casa.y;
     }
 
-    // --- Conexión al backend ---
     async function generarHistoria(prompt){
       const response = await fetch(BACKEND_URL, {
         method: "POST",
