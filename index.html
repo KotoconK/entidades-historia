@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Dos Entidades con Historia y Cotilleo</title>
+  <title>Dos Entidades con Historia y Cotilleos</title>
   <style>
     body { display: flex; font-family: sans-serif; margin: 0; }
     #canvasContainer { flex: 2; }
@@ -21,14 +21,16 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <script>
     let A, B, zonas = [], zonaImgs = [];
+    let imgA, imgB;
     let tiempo = 0, logDiv;
+    let ultimaInteraccion = 0;
 
     function preload() {
-      imgA = loadImage("azul.png");
-      imgB = loadImage("rojo.png");
-      zonaImgs[0] = loadImage("zona1.png");
-      zonaImgs[1] = loadImage("zona2.png");
-      zonaImgs[2] = loadImage("zona3.png");
+      imgA = loadImage("https://raw.githubusercontent.com/KotoconK/entidades-historia/main/azul.png");
+      imgB = loadImage("https://raw.githubusercontent.com/KotoconK/entidades-historia/main/rojo.png");
+      zonaImgs[0] = loadImage("https://raw.githubusercontent.com/KotoconK/entidades-historia/main/zona1.png");
+      zonaImgs[1] = loadImage("https://raw.githubusercontent.com/KotoconK/entidades-historia/main/zona2.png");
+      zonaImgs[2] = loadImage("https://raw.githubusercontent.com/KotoconK/entidades-historia/main/zona3.png");
     }
 
     function setup() {
@@ -53,26 +55,51 @@
 
     function draw() {
       background(230);
-      for (let z of zonas) image(z.img, z.x-z.r, z.y-z.r, z.r*2, z.r*2);
+
+      // Dibujar zonas
+      for (let z of zonas) image(z.img, z.x - z.r, z.y - z.r, z.r*2, z.r*2);
 
       mover(A); mover(B);
-      image(imgA, A.x-A.r, A.y-A.r, A.r*2, A.r*2);
-      image(imgB, B.x-B.r, B.y-B.r, B.r*2, B.r*2);
 
+      image(imgA, A.x - A.r, A.y - A.r, A.r*2, A.r*2);
+      image(imgB, B.x - B.r, B.y - B.r, B.r*2, B.r*2);
+
+      // Comprobar recogida de información y añadir log
       for (let z of zonas) {
-        if (dist(A.x,A.y,z.x,z.y)<A.r+z.r && !A.memoria.includes(z.info)) A.memoria.push(z.info);
-        if (dist(B.x,B.y,z.x,z.y)<B.r+z.r && !B.memoria.includes(z.info)) B.memoria.push(z.info);
+        if (dist(A.x,A.y,z.x,z.y) < A.r+z.r && !A.memoria.includes(z.info)) {
+          A.memoria.push(z.info);
+          addLog("A recogió: " + z.info);
+        }
+        if (dist(B.x,B.y,z.x,z.y) < B.r+z.r && !B.memoria.includes(z.info)) {
+          B.memoria.push(z.info);
+          addLog("B recogió: " + z.info);
+        }
       }
 
-      if (dist(A.x,A.y,B.x,B.y)<A.r+B.r+20) comunicarConIA(A,B);
+      // Comunicación si están cerca
+      if (dist(A.x,A.y,B.x,B.y) < A.r+B.r+20){
+        if(millis() - ultimaInteraccion > 3000){ // cada 3 segundos aprox
+          ultimaInteraccion = millis();
+          comunicarConIA(A,B);
+        }
+      }
     }
 
     function mover(ent){
-      ent.x += random(-2,2); ent.y += random(-2,2);
+      ent.x += random(-2,2);
+      ent.y += random(-2,2);
       ent.x = constrain(ent.x, ent.r, width-ent.r);
       ent.y = constrain(ent.y, ent.r, height-ent.r);
     }
 
+    function addLog(msg){
+      let p = document.createElement("p");
+      p.textContent = msg;
+      logDiv.appendChild(p);
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    // --- Backend ChatGPT ---
     async function generarHistoria(prompt){
       const response = await fetch("https://entidades-historia.onrender.com", {
         method: "POST",
@@ -83,11 +110,7 @@
       return data.choices[0].message.content;
     }
 
-    let ultimaInteraccion = 0;
     async function comunicarConIA(e1,e2){
-      if(frameCount - ultimaInteraccion < 120) return; // limitar frecuencia
-      ultimaInteraccion = frameCount;
-
       let prompt = `
 Dos entidades interactúan.
 A sabe: ${e1.memoria.join(", ")}
@@ -97,11 +120,12 @@ Genera:
 2. Historia con cotilleos y mentiras divertidas
 Devuélvelo como texto narrativo.
       `;
-      const historia = await generarHistoria(prompt);
-      let p = document.createElement("p");
-      p.textContent = historia;
-      logDiv.appendChild(p);
-      logDiv.scrollTop = logDiv.scrollHeight;
+      try{
+        const historia = await generarHistoria(prompt);
+        addLog(historia);
+      }catch(e){
+        addLog("Error al generar historia: " + e.message);
+      }
     }
   </script>
 </body>
